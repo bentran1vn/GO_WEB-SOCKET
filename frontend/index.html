@@ -81,7 +81,8 @@
 
                 conn.onmessage = function(evt){
                     const eventData = JSON.parse(evt.data)
-                    routeEvent(eventData)
+                    const event = Object.assign(new Event, eventData)
+                    routeEvent(event)
                 }
             } else {
                 alert("WebSocket is not supported by your Browser!")
