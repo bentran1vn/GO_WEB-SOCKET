@@ -38,6 +38,7 @@ func (m *Manager) setupEventHandlers() {
 }
 
 func SendMessage(event Event, c *Client) error {
+	fmt.Printf("Sending event: %v\n", event)
 	return nil
 }
 
