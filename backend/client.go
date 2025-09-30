@@ -3,8 +3,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+// Frontend default websocket always response the pong message
+
+var (
+	pongWait     = 10 * time.Second
+	pingInterval = (pongWait * 9) / 10 // must be less than pongWait
 )
 
 type ClientList map[*Client]bool
@@ -31,6 +39,16 @@ func (c *Client) readMessages() {
 		// clean up connection
 		c.manager.RemoveClient(c)
 	}()
+
+	if err := c.connection.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	c.connection.SetReadLimit(512)
+
+	c.connection.SetPongHandler(c.pongHandler)
+
 	for {
 		_, payload, err := c.connection.ReadMessage()
 
@@ -60,8 +78,12 @@ func (c *Client) writeMessages() {
 		// clean up connection
 		c.manager.RemoveClient(c)
 	}()
+
+	ticker := time.NewTicker(pingInterval)
+
 	for {
 		select {
+
 		case message, ok := <-c.egress:
 			if !ok {
 				if err := c.connection.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
@@ -80,6 +102,20 @@ func (c *Client) writeMessages() {
 				fmt.Printf("Error: %v\n", err)
 			}
 			fmt.Printf("Message sent")
+
+		case <-ticker.C:
+			fmt.Printf("ping \n")
+
+			if err := c.connection.WriteMessage(websocket.PingMessage, nil); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				return
+			}
 		}
+
 	}
+}
+
+func (c *Client) pongHandler(pongMsg string) error {
+	fmt.Printf("pong \n")
+	return c.connection.SetReadDeadline(time.Now().Add(pongWait))
 }
