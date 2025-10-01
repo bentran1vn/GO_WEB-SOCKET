@@ -1,6 +1,9 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Event struct {
 	Type    string          `json:"type"`
@@ -10,11 +13,21 @@ type Event struct {
 type EventHandler func(event Event, client *Client) error
 
 const (
-	EventSendMessage = "send_message"
-	NewMessage       = "new_message"
+	EventSendMessage    = "send_message"
+	EventNewMessage     = "new_message"
+	EventChangeChatRoom = "change_room"
 )
 
 type SendMessageEvent struct {
 	Message string `json:"message"`
 	From    string `json:"from"`
+}
+
+type NewMessageEvent struct {
+	SendMessageEvent
+	Sent time.Time `json:"sent"`
+}
+
+type ChangeChatRoomEvent struct {
+	Name string `json:"room"`
 }

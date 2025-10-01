@@ -36,11 +36,33 @@
     </div>
     <script>
         var selectedChat = "general";
+        var conn = null;
 
         class Event {
             constructor(type, payload) {
                 this.type = type;
                 this.payload = payload;
+            }
+        }
+
+        class SendMessageEvent {
+            constructor(message, from) {
+                this.message = message;
+                this.from = from;
+            }
+        }
+
+        class NewMessageEvent {
+            constructor(message, from, sent) {
+                this.message = message;
+                this.from = from;
+                this.sent = sent;
+            }
+        }
+
+        class ChangeChatroomEvent {
+            constructor(name) {
+                this.name = name;
             }
         }
 
@@ -50,12 +72,21 @@
             }
             switch(event.type) {
                 case "new_message":
-                    console.log("New message !")
+                    const messageEvent = Object.assign(new NewMessageEvent, event.payload)
+                    appendChatMessage(messageEvent)
                     break;
                 default:
                     console.log("Unknown event type: " + event.type);
                     break
             }
+        }
+
+        function appendChatMessage(messageEvent){
+            var date = new Date(messageEvent.sent);
+            const formatMsg = date.toLocaleTimeString() + " - " + messageEvent.from + ": " + messageEvent.message + "\n"
+            textarea = document.getElementById("chatmessages");
+            textarea.innerHTML = textarea.innerHTML + formatMsg;
+            textarea.scrollTop = textarea.scrollHeight;
         }
 
         function sendEvent(eventName, payload) {
@@ -68,7 +99,12 @@
         function changeChatroom() {
             var newChat = document.getElementById("chatroom");
             if(newChat != null && newChat.value != selectedChat){
-                console.log(newChat)
+                selectedChat = newChat.value
+                document.getElementById("chat-header").innerText = "Currently in chat: " + selectedChat
+                let changeChatEvent = new ChangeChatroomEvent(selectedChat)
+                sendEvent("change_room", changeChatEvent)
+                textarea = document.getElementById("chatmessages");
+                textarea.innerHTML = "Switched to chat: " + selectedChat + "\n"
             }
             return false
         }
@@ -76,7 +112,8 @@
         function sendMessage(){
             var newMessage = document.getElementById("message");
             if(newMessage != null ){
-                sendEvent("send_message", newMessage.value)
+                let outgoingMessage = new SendMessageEvent(newMessage.value, "ben")
+                sendEvent("send_message", outgoingMessage)
             }
             return false
         }
@@ -112,7 +149,7 @@
         function connectWebSocket(otp){
             if(window["WebSocket"]){
                 console.log("WebSocket is supported by your Browser!")
-                conn = new WebSocket("ws://" + document.location.host + "/ws?otp=" + otp)
+                conn = new WebSocket("wss://" + document.location.host + "/ws?otp=" + otp)
 
                 conn.onopen = function(evt){
                     console.log("Connection open ...")
