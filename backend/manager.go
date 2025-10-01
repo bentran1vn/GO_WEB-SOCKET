@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -20,13 +23,16 @@ type Manager struct {
 	clients ClientList
 	sync.RWMutex
 
+	otps RetentionMap
+
 	handlers map[string]EventHandler
 }
 
-func NewManager() *Manager {
+func NewManager(ctx context.Context) *Manager {
 	m := &Manager{
 		clients:  make(ClientList),
 		handlers: make(map[string]EventHandler),
+		otps:     NewRetentionMap(ctx, 5*time.Minute),
 	}
 
 	m.setupEventHandlers()
@@ -57,6 +63,19 @@ func (m *Manager) routeEvent(event Event, c *Client) error {
 
 // ServeWS handles WebSocket connections.
 func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
+
+	otp := r.URL.Query().Get("otp")
+
+	if otp == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if !m.otps.ValidateOTP(otp) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	fmt.Println("New WebSocket connection")
 
 	conn, err := webSocketUpgrader.Upgrade(w, r, nil)
@@ -72,6 +91,40 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// Start Client Processes
 	go client.readMessages()
 	go client.writeMessages()
+}
+
+func (m *Manager) loginHandler(w http.ResponseWriter, r *http.Request) {
+	type userLoginRequest struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	var req userLoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	if req.Username == "ben" && req.Password == "123" {
+		type response struct {
+			OTP string `json:"otp"`
+		}
+
+		otp := m.otps.NewOTP()
+		resp := response{OTP: otp.Key}
+
+		data, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(data)
+		return
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Write([]byte("Invalid credentials"))
+	return
 }
 
 func (m *Manager) AddClient(c *Client) {
